@@ -1,0 +1,227 @@
+---
+title: "Reporte"
+author: "Jordi García Garcés"
+date: "2025-02-01"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+---
+
+# Analysis of the transcriptome of people with Hutchinson-Gilford Progeria Syndrome
+
+This data was recovered from the study "Predicting age from the transcriptome of human dermal fibroblasts" in recount3.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE)
+```
+
+```{r libraries, echo=TRUE}
+# Libraries
+library("edgeR")
+library("ggplot2")
+library("pheatmap")
+library("RColorBrewer")
+library("recount3")
+```
+
+```{r dataset, echo=TRUE}
+# Download the dataset recovered from recount3
+rse_gene_SRP144355 <- recount3::create_rse_manual(
+    project = "SRP144355",
+    project_home = "data_sources/sra",
+    organism = "human",
+    annotation = "gencode_v26",
+    type = "gene"
+)
+```
+
+```{r reads, echo=TRUE}
+# Analysis of the reads of our data set
+assay(rse_gene_SRP144355, "counts") <- compute_read_counts(rse_gene_SRP144355)
+# Attributes of Sequence Read Archive 
+rse_gene_SRP144355$sra.sample_attributes[1:3]
+```
+
+```{r sra metadata, echo=TRUE}
+# Access to the metadata of sra
+rse_gene_SRP144355 <- expand_sra_attributes(rse_gene_SRP144355)
+colData(rse_gene_SRP144355)[
+    ,
+    grepl("^sra_attribute", colnames(colData(rse_gene_SRP144355)))
+]
+```
+
+```{r correct class, echo=TRUE, warning=FALSE}
+# Go from character to numeric or factor
+rse_gene_SRP144355$sra_attribute.age <- as.numeric(rse_gene_SRP144355$sra_attribute.age)
+rse_gene_SRP144355$sra_attribute.disease <- 
+  factor(tolower(rse_gene_SRP144355$sra_attribute.disease))
+rse_gene_SRP144355$sra_attribute.Sex <- factor(rse_gene_SRP144355$sra_attribute.Sex)
+```
+
+```{r statistic summary, echo=TRUE}
+# Summary of the attributes of interest
+summary(as.data.frame(colData(rse_gene_SRP144355)[
+    ,
+    grepl("^sra_attribute\\.(age|disease|Sex)", colnames(colData(rse_gene_SRP144355)))
+]))
+```
+
+```{r assigned gene prop, echo=TRUE}
+# Quality check 
+rse_gene_SRP144355$assigned_gene_prop <- 
+  rse_gene_SRP144355$recount_qc.gene_fc_count_all.assigned / 
+  rse_gene_SRP144355$recount_qc.gene_fc_count_all.total
+
+summary(rse_gene_SRP144355$assigned_gene_prop)
+```
+
+```{r normal and hgps, echo=TRUE}
+# Quality of assigned_gene_prop and attribute disease 
+with(colData(rse_gene_SRP144355), tapply(assigned_gene_prop, sra_attribute.disease, summary))
+```
+
+```{r histogram, echo=TRUE}
+# Visualization with histogram of the quality 
+hist(rse_gene_SRP144355$assigned_gene_prop, col = "lightblue",
+     main = "Assigned gene properties", xlab = "ratio of reads per gene")
+```
+
+```{r gene prop, echo=TRUE}
+table(rse_gene_SRP144355$assigned_gene_prop < 0.5)
+# All have good quality 
+```
+
+## Data normalization
+
+```{r edger, echo=TRUE}
+# Filtering and normalization with edger  
+library(edgeR)
+
+# object dgelist used by edger 
+dge <- DGEList(
+    counts = assay(rse_gene_SRP144355, "raw_counts"),
+    genes = rowData(rse_gene_SRP144355)
+)
+# Apply filterByExpr to remove low expression genes
+dge$samples$group <- factor(rse_gene_SRP144355$sra_attribute.disease )
+keep_genes <- filterByExpr(dge)
+#Filters genes in the DGEList object
+dge <- dge[keep_genes, , keep.lib.sizes=FALSE]
+
+# Normalize data
+dge <- calcNormFactors(dge)
+
+# Dimensions before and after filtering
+dim(rse_gene_SRP144355)  # Before
+dim(dge)                 # After
+```
+
+## Expression analysis
+
+```{r boxplots, echo=TRUE}
+# Boxplots and violin plots of normal and hgps
+ggplot(as.data.frame(colData(rse_gene_SRP144355)), aes(y = assigned_gene_prop,
+                                                       x = sra_attribute.disease)) +
+    geom_violin(trim = FALSE, fill = "lightblue", alpha = 0.5) +  
+    geom_boxplot(width = 0.2) +
+    theme_bw(base_size = 20) +
+    ylab("Assigned Gene Prop") +
+    xlab("Disease Group")
+
+```
+
+```{r mod, echo=TRUE}
+mod <- model.matrix(~ rse_gene_SRP144355$sra_attribute.disease + sra_attribute.Sex + assigned_gene_prop,
+    data = colData(rse_gene_SRP144355)
+)
+colnames(mod)
+```
+
+```{r limma, echo=TRUE}
+library("limma")
+vGene <- voom(dge, mod, plot = FALSE)
+```
+
+```{r eBayes, echo=TRUE}
+eb_results <- eBayes(lmFit(vGene))
+
+de_results <- topTable(
+    eb_results,
+    coef = 2,
+    number = nrow(rse_gene_SRP144355),
+    sort.by = "none"
+)
+dim(de_results)
+```
+
+```{r table ,echo=TRUE}
+table(de_results$adj.P.Val < 0.05)
+```
+
+```{r volcanoplot, echo=TRUE}
+# Volcano plot "normal" respect "hgps"
+volcanoplot(eb_results, coef = 2, highlight = 4, names = de_results$gene_name)
+```
+
+```{r genes, echo=TRUE}
+# Genes with highest P-value
+de_results[de_results$gene_name %in% c("FOXE1", "SLITRK1", "CYTIP", "BMP4"), ]
+```
+
+```{r heatmap, echo=TRUE}
+## Extract values from the genes of interest
+exprs_heatmap <- vGene$E[rank(de_results$adj.P.Val) <= 30, ]
+
+## And with friendlier column names
+df <- as.data.frame(colData(rse_gene_SRP144355)[, c("sra_attribute.disease",
+                                                    "sra_attribute.Sex",
+                                                    "sra_attribute.age")])
+colnames(df) <- c("DiseaseGroup", "Sex", "Age")
+
+```
+
+```{r heatmap names, echo=TRUE}
+## We save the IDs of our 30 genes
+nombres_originales <- rownames(exprs_heatmap)
+
+rownames(exprs_heatmap) <- rowRanges(rse_gene_SRP144355)$gene_name[
+    match(rownames(exprs_heatmap),
+    rowRanges(rse_gene_SRP144355)$gene_id)
+]
+
+## heatmap with the gene names
+pheatmap(
+    exprs_heatmap,
+    cluster_rows = TRUE,
+    cluster_cols = TRUE,
+    show_rownames = TRUE,
+    show_colnames = FALSE,
+    annotation_col = df
+)
+```
+
+```{r Gropus, echo=TRUE, warning=FALSE}
+# library RColorBrewer
+col.group <- df$DiseaseGroup
+levels(col.group) <- brewer.pal(nlevels(col.group), "Set1")
+col.group <- as.character(col.group)
+# MDS by groups of age 
+plotMDS(vGene$E, labels = df$DiseaseGroup, col = col.group)
+
+```
+
+## Biological Analysis
+
+The Hutchinson-Gilford Progeria Syndrome (HGPS) is a premature aging disorder caused by a mutation in the "LMNA" gene(1). In this study I aimed to explore wheter this mutation or syndrome affects individuals not only physical level, but also at the transciptomic level.
+
+Upon analyzing the overexpressed and underexpressed genes, no absolute relationship was observed between individuals with HGPS. Howeever, we can conclude that there are certain genes that are notably overexpressed in individuals with HGPS compared to the majority of individuals without the syndrome.
+
+Interestingly, the results show that age does not seem to create a distinct cluster, despite the fact that HGPS is a premature aging disorder.
+
+In conclusion, while detecting a comprehensive transcriptomic relationship among individuals with HGPS is challenging, it is evident that some genes exhibit significant differences in expression. Therefore, further analysis of these genes, particularly in relation to the LMNA gene or the syndrome itself, could provide valuable insights into the underlying mechanisms of HGPS.
+
+## References
+
+1.  Cisneros B, García-Aguirre I, De Ita M, Arrieta-Cruz I, Rosas-Vargas H. Hutchinson-Gilford Progeria Syndrome: Cellular Mechanisms and Therapeutic Perspectives. Arch Med Res. 2023 Jul;54(5):102837. doi: 10.1016/j.arcmed.2023.06.002. Epub 2023 Jun 28. PMID: 37390702.
