@@ -6,6 +6,7 @@ output:
   pdf_document:
     toc: yes
     toc_depth: 3
+bibliography: References_proyecto.bib
 ---
 
 # Analysis of the transcriptome of people with Hutchinson-Gilford Progeria Syndrome
@@ -214,14 +215,15 @@ plotMDS(vGene$E, labels = df$DiseaseGroup, col = col.group)
 
 ## Biological Analysis
 
-The Hutchinson-Gilford Progeria Syndrome (HGPS) is a premature aging disorder caused by a mutation in the "LMNA" gene(1). In this study I aimed to explore wheter this mutation or syndrome affects individuals not only physical level, but also at the transciptomic level.
+The Hutchinson-Gilford Progeria Syndrome (HGPS) is a premature aging disorder caused by a mutation in the "LMNA" gene[@cisneros_2023]. In this study I aimed to explore wheter this mutation or syndrome affects individuals not only physical level, but also at the transciptomic level.
 
-Upon analyzing the overexpressed and underexpressed genes, no absolute relationship was observed between individuals with HGPS. Howeever, we can conclude that there are certain genes that are notably overexpressed in individuals with HGPS compared to the majority of individuals without the syndrome.
+Upon analyzing the overexpressed and underexpressed genes, no absolute relationship was observed between individuals with HGPS. However, we can conclude that there are certain genes that are notably overexpressed in individuals with HGPS compared to the majority of individuals without the syndrome, nevertheless, it is important to highlight that the four genes with the greatest expression changes FOXE1 [@na_website_nda], SLITRK1 [@na_website_nd], CYTIP [@na_website_ndb], and BMP4 [@na_website_ndc] do not have a direct relationship with HGPS according to NCBI records. This suggests the need for further studies to explore their potential involvement in this syndrome.
 
 Interestingly, the results show that age does not seem to create a distinct cluster, despite the fact that HGPS is a premature aging disorder.
 
 In conclusion, while detecting a comprehensive transcriptomic relationship among individuals with HGPS is challenging, it is evident that some genes exhibit significant differences in expression. Therefore, further analysis of these genes, particularly in relation to the LMNA gene or the syndrome itself, could provide valuable insights into the underlying mechanisms of HGPS.
 
+
 ## References
 
-1.  Cisneros B, García-Aguirre I, De Ita M, Arrieta-Cruz I, Rosas-Vargas H. Hutchinson-Gilford Progeria Syndrome: Cellular Mechanisms and Therapeutic Perspectives. Arch Med Res. 2023 Jul;54(5):102837. doi: 10.1016/j.arcmed.2023.06.002. Epub 2023 Jun 28. PMID: 37390702.
+
